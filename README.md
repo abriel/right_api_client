@@ -13,15 +13,19 @@ It is assumed that users are already familiar with the RightScale API:
 Maintained by the RightScale QA ServerTemplate and Ivory Automation Team
 
 ## Installation
-Ruby 1.8.7 or higher is required.
+Ruby 2.0 or higher is required as of version 1.6
 
     gem install right_api_client
 
 ## Versioning
-The right\_api\_client gem is versioned using the usual X.Y.Z notation, where X.Y is the
-RightScale API version, and Z is the client version. For example, if you want to use
-RightScale API 1.5, you should use the latest version of the 1.5 gem. This will ensure
-that you get the latest bug fixes for the client that is compatible with that API version.
+* Version 1.6.x
+  - API 1.5
+  - Ruby 2.0 and above
+  - Patch level receives improvements and bug fixes moving forward.
+* Version 1.5.x
+  - API 1.5
+  - Ruby 1.8, 1.9.3
+  - Patch level receives only security or high priority fixes if requested.
 
 ## Usage Instructions
 New users can start with the following few lines of code and navigate their way around the API by following
@@ -33,7 +37,7 @@ navigate to the Settings > Account Settings page. The account is is at the end o
     puts "Available methods: #{@client.api_methods}"
 
 The client makes working with and getting to know the API much easier. It spiders the API dynamically to
-discover its resources on the fly. At every step, the user has the ability to query api_methods(), which
+discover its resources on the fly. At every step, the user has the ability to query api\_methods(), which
 indicates the potential methods that can be called. **The ```config/login.yml.example``` file provides
 details of different login parameters, for example, oauth authentication.**
 
@@ -108,8 +112,9 @@ HTTP calls can sometimes fail. To enable retrying idempotent requests automatica
 Multiple accounts can be managed by using the api\_url and account\_id attributes on the client.
 
 The api\_url attribute allows users to modify the shard which the client is being used to connect to.
-This should not be required as the client will find the correct shard using the account id but is
-included for completeness.
+This should not be required as the client will find the correct shard using the account id (except
+when using a refresh\_token for authorization; in this case api\_url must be set to your shard
+address).
 
 Example:
 
@@ -162,7 +167,7 @@ Launch the newly created server. Inputs are a bit tricky so they have to be set 
     inputs = "inputs[][name]=NAME1&inputs[][value]=text:VALUE1&inputs[][name]=NAME2&inputs[][value]=text:VALUE2"
     new_server.show.launch(inputs)
 
-Run a script on the server. The API does not currently expose right_scripts, hence, the script href has
+Run a script on the server. The API does not currently expose right\_scripts, hence, the script href has
 to be retrieved from the dashboard and put in the following href format.
 
     script_href = "right_script_href=/api/right_scripts/382371"
@@ -174,7 +179,7 @@ Update the server's name
     params = { :server => {:name => 'New Server Name'}}
     @client.servers(:id => 'my_server_id').update(params)
 
-Terminate the server (i.e. shutdown its current_instance)
+Terminate the server (i.e. shutdown its current\_instance)
 
     @client.servers(:id => 'my_server_id').show.terminate
 
@@ -238,6 +243,17 @@ Due to the limiting scope of the instance-facing calls, only a subset of these m
 (see the API Reference Docs for valid methods). If you call a method that instance's are not authorized to access,
 you will get a 403 Permission Denied error.
 
+## RightLink10 and Instance Facing Calls:
+Having RightLink10 installed on an instance allows 'instance facing calls' via a local
+[proxy](http://docs.rightscale.com/rl10/reference/rl10_local_and_proxied_http_requests.html).  To use
+the proxy on the instance, you will only need to provide the following parameter:
+
+- ```:rl10``` Set this to ```true```
+
+Setting this parameter to `true` will use the information in the proxy authentication file to create the client.
+
+### Example
+    @instance_client = RightApi::Client.new(:rl10 => true)
 
 # Design Decisions
 In the code, we only hard-code CRUD operations for resources. We use the .show and .index methods to make the client
@@ -296,20 +312,23 @@ bundle exec rspec spec/functional
 
 # Troubleshooting
 
+## Known issues:
+ * Cookies are lost on follow redirect.  This is a bug introduced in rest-client. 
+[Github issue #406](https://github.com/rest-client/rest-client/issues/406)
+has already been filed for this.  To work around this, please lock the rest-client version 
+to 1.7 until the issue is fixed.
+
+
 ## Wrong ruby version
 
-Ruby 1.8.7 or higher is required.
+* As of right\_api\_client gem version 1.6, only Ruby 2.0 or higher is supported.
+* right\_api\_client version 1.5.28 was tested with ruby 1.9, but it no longer supported.
 
 ## Warning message: To disable read timeouts, please set timeout to nil instead of -1
 
 To avoid this message you can set ```:timeout```  when creating your RightAp::Client object.  You will need
 to use a different value depending on which version of rest-client is being used.
 
-### rest-client 1.6.x supports ruby 1.8.x
-* ```:timeout => nil```, 60 second timeout (default of Net::HTTP)
-* ```:timeout => -1```, infinite timeout.
-
-### rest-client 1.7.x supports ruby >= 1.9.x
 * **```:timeout => nil```, infinite timeout - no warning message.**
 * ```:timeout => -1```, infinite timeout - plus the error message above being displayed.
 

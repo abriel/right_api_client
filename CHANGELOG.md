@@ -3,6 +3,34 @@
 ## Next
  - Your info here
 
+## 1.6.3
+ - \#109 Update json version requirement for ruby2.4 compatibility
+
+## 1.6.2
+ - \#108 Raise a specific error if the API returns an empty 200 response
+ - \#106 Bump mime-types version to resolve dependencies with fog-azure-rm gem
+ - \#104 Switch to a more bundlerish dev workflow
+ - \#102 Rework README to reflect gem version not tied to api version
+
+## 1.6.1
+ - Disassociate API version number from gem version number
+
+## 1.6.0
+ - \#101 Deprecate support for ruby 1.x
+ - \#100 Add support for using local proxy with RightLink10
+
+## 1.5.28
+ - \#98 Update do_put to add text/plain Content-type
+ - \#97 Added put action for the runnable_binding resource
+
+## 1.5.27
+ - \#96 Set default timeout to 6 minutes since the RightScale API has a timeout of 5 minutes for calls
+ - \#94 Updating the README and config/login.yml.example with oauth info
+ - \#93 Work around getting ASCII-8BIT for audit entry detail.
+ - \#91 Fix for issue #83 instance facing client should support tags
+ - \#90 Allow GET /api/right_scripts/:id/source to work since it comes back as text/plain
+ - \#88 Update maintainer info, and add description to bypass the timeout warning
+
 ## 1.5.26
  - \#87 Use the actual response code to determine if re-login is appropriate
 

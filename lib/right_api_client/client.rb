@@ -3,6 +3,7 @@ require 'json'
 require 'set'
 require 'cgi'
 require 'base64'
+require 'rbconfig'
 
 require File.expand_path('../version', __FILE__) unless defined?(RightApi::Client::VERSION)
 require File.expand_path('../helper', __FILE__)
@@ -55,7 +56,7 @@ module RightApi
     include Helper
 
     DEFAULT_OPEN_TIMEOUT = nil
-    DEFAULT_TIMEOUT = -1
+    DEFAULT_TIMEOUT = 6 * 60
     DEFAULT_MAX_ATTEMPTS = 5
 
     DEFAULT_SSL_VERSION = 'TLSv1'
@@ -74,6 +75,7 @@ module RightApi
       account_id api_url api_version
       timeout open_timeout max_attempts
       enable_retry rest_client_class
+      rl10
     ]
 
     # @return [String] OAuth 2.0 refresh token if provided
@@ -128,6 +130,19 @@ module RightApi
 
       raise 'This API client is only compatible with the RightScale API 1.5 and upwards.' if (Float(@api_version) < 1.5)
 
+      # If rl10 parameter was passed true, read secrets file to set @local_token, and @api_url
+      if @rl10
+        case RbConfig::CONFIG['host_os']
+        when /mswin|mingw|cygwin/
+          local_secret_file = File.join(ENV['ProgramData'] || 'C:/ProgramData', 'RightScale/RightLink/secret')
+        else
+          local_secret_file = '/var/run/rightlink/secret'
+        end
+        local_auth_info = Hash[File.readlines(local_secret_file).map{ |line| line.chomp.split('=', 2) }]
+        @local_token = local_auth_info['RS_RLL_SECRET']
+        @api_url = "http://localhost:#{local_auth_info['RS_RLL_PORT']}"
+      end
+
       # allow a custom resource-style REST client (for special logging, etc.)
       @rest_client_class ||= ::RestClient::Resource
       @rest_client = @rest_client_class.new(@api_url, :open_timeout => @open_timeout, :timeout => @timeout, :ssl_version => @ssl_version)
@@ -147,7 +162,7 @@ module RightApi
       timestamp_cookies
 
       # Add the top level links for instance_facing_calls
-      if @instance_token
+      if @instance_token || @local_token
         resource_type, path, data = self.do_get(ROOT_INSTANCE_RESOURCE)
         instance_href = get_href_from_links(data['links'])
         cloud_href = instance_href.split('/instances')[0]
@@ -183,8 +198,11 @@ module RightApi
     end
 
     def to_s
-      "#<RightApi::Client #{api_url}>"
+      api_host = URI.parse(api_url).host.split('.').first rescue 'unknown'
+      "#<RightApi::Client host=#{api_host} account=#{@account_id}>"
     end
+
+    alias inspect to_s
 
     # Log HTTP calls to file (file can be STDOUT as well)
     def log(file)
@@ -316,6 +334,10 @@ module RightApi
         h[:cookies] = @cookies
       end
 
+      if @local_token
+        h['X-RLL-Secret'] = @local_token
+      end
+
       h
     end
 
@@ -358,6 +380,11 @@ module RightApi
               charset = get_charset(response.headers)
               if charset && response.body.encoding != charset
                 response.body.force_encoding(charset)
+              end
+
+              # raise an error if the API is misbehaving and returning an empty response when it shouldn't
+              if type != 'text' && response.body.empty?
+                raise EmptyBodyError.new(request, response)
               end
 
               [type, response.body]
@@ -415,6 +442,8 @@ module RightApi
               # This is needed for the tags Resource -- which returns a 200 and has a content type
               # therefore, ResourceDetail objects needs to be returned
               if response.code == 200 && response.headers[:content_type].index('rightscale')
+                # raise an error if the API is misbehaving and returning an empty response when it shouldn't
+                raise EmptyBodyError.new(request, response) if response.body.empty?
                 resource_type = get_resource_type(response.headers[:content_type])
                 data = JSON.parse(response, :allow_nan => true)
                 # Resource_tag is returned after querying tags.by_resource or tags.by_tags.
@@ -457,8 +486,7 @@ module RightApi
             update_last_request(request, response)
 
             case response.code
-            when 200
-            when 204
+            when 200, 204
               nil
             when 301, 302
               update_api_url(response)
@@ -483,9 +511,12 @@ module RightApi
 
       req, res, resource_type, body = nil
 
+      # Altering headers to set Content-Type to text/plain when updating rightscript content
+      put_headers = path =~ %r(^/api/right_scripts/.+/source$) ? headers.merge('Content-Type' => 'text/plain') : headers
+
       begin
         retry_request do
-          @rest_client[path].put(params, headers) do |response, request, result|
+          @rest_client[path].put(params, put_headers) do |response, request, result|
             req, res = request, response
             update_cookies(response)
             update_last_request(request, response)
@@ -520,7 +551,11 @@ module RightApi
     #
     # @return [Boolean] true if re-login is known to be required
     def need_login?
-      if @access_token
+      # @local_token is the key to use the local proxy.  Connecting using this key
+      # and the local proxy does not require login.
+      if @local_token
+        false
+      elsif @access_token
         # If our access token is expired and we know it...
         @access_token_expires_at && @access_token_expires_at - Time.now < 900
       elsif @cookies
