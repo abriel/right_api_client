@@ -300,7 +300,7 @@ module RightApi
             update_api_url(response)
             response = @rest_client[path].extend(PostOverride).post(params, 'X-Api-Version' => @api_version)
           else
-            response.return!(request, result)
+            response.return!
           end
         end
       rescue Errno::ECONNRESET, RestClient::RequestTimeout, OpenSSL::SSL::SSLError, RestClient::ServerBrokeConnection
@@ -452,7 +452,7 @@ module RightApi
                   RightApi::ResourceDetail.new(self, resource_type, path, obj)
                 }
               else
-                response.return!(request, result)
+                response.return!
               end
             when 301, 302
               update_api_url(response)
